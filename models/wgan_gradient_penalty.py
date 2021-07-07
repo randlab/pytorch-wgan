@@ -44,6 +44,45 @@ class Generator(torch.nn.Module):
     def forward(self, x):
         x = self.main_module(x)
         return self.output(x)
+    
+    
+class Generator_64(torch.nn.Module):
+    def __init__(self, channels):
+        super().__init__()
+        # Filters [1024, 512, 256]
+        # Input_dim = 100
+        # Output_dim = C (number of channels)
+        self.main_module = nn.Sequential(
+            # Z latent vector 100
+            nn.ConvTranspose2d(in_channels=100, out_channels=1024, kernel_size=4, stride=1, padding=0),
+            nn.BatchNorm2d(num_features=1024),
+            nn.ReLU(True),
+
+            # State (1024x4x4)
+            nn.ConvTranspose2d(in_channels=1024, out_channels=512, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(num_features=512),
+            nn.ReLU(True),
+
+            # State (512x8x8)
+            nn.ConvTranspose2d(in_channels=512, out_channels=256, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(num_features=256),
+            nn.ReLU(True),
+
+            # State (256x16x16)
+            nn.ConvTranspose2d(in_channels=256, out_channels=128, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(num_features=128),
+            nn.ReLU(True),
+            
+            # State (128, 32, 32)
+            nn.ConvTranspose2d(in_channels=128, out_channels=channels, kernel_size=4, stride=2, padding=1)
+            # output of main module --> Image (Cx64x64)
+            )
+
+        self.output = nn.Tanh()
+
+    def forward(self, x):
+        x = self.main_module(x)
+        return self.output(x)
 
 
 class Discriminator(torch.nn.Module):
@@ -85,7 +124,48 @@ class Discriminator(torch.nn.Module):
         # Use discriminator for feature extraction then flatten to vector of 16384
         x = self.main_module(x)
         return x.view(-1, 1024*4*4)
+    
+class Discriminator_64(torch.nn.Module):
+    def __init__(self, channels):
+        super().__init__()
+        # Filters [256, 512, 1024]
+        # Input_dim = channels (Cx64x64)
+        # Output_dim = 1
+        self.main_module = nn.Sequential(
+            # Image (Cx64x64)
+            nn.Conv2d(in_channels=channels, out_channels=128, kernel_size=4, stride=2, padding=1),
+            nn.InstanceNorm2d(128, affine=True),
+            nn.LeakyReLU(0.2, inplace=True),
+            
+            # State (128x32x32)
+            nn.Conv2d(in_channels=128, out_channels=256, kernel_size=4, stride=2, padding=1),
+            nn.InstanceNorm2d(256, affine=True),
+            nn.LeakyReLU(0.2, inplace=True),
 
+            # State (256x16x16)
+            nn.Conv2d(in_channels=256, out_channels=512, kernel_size=4, stride=2, padding=1),
+            nn.InstanceNorm2d(512, affine=True),
+            nn.LeakyReLU(0.2, inplace=True),
+
+            # State (512x8x8)
+            nn.Conv2d(in_channels=512, out_channels=1024, kernel_size=4, stride=2, padding=1),
+            nn.InstanceNorm2d(1024, affine=True),
+            nn.LeakyReLU(0.2, inplace=True))
+            # output of main module --> State (1024x4x4)
+
+        self.output = nn.Sequential(
+            # The output of D is no longer a probability, we do not apply sigmoid at the output of D.
+            nn.Conv2d(in_channels=1024, out_channels=1, kernel_size=4, stride=1, padding=0))
+
+
+    def forward(self, x):
+        x = self.main_module(x)
+        return self.output(x)
+
+    def feature_extraction(self, x):
+        # Use discriminator for feature extraction then flatten to vector of 16384
+        x = self.main_module(x)
+        return x.view(-1, 1024*4*4)
 
 class WGAN_GP(object):
     def __init__(self, args):
@@ -115,6 +195,8 @@ class WGAN_GP(object):
         self.generator_iters = args.generator_iters
         self.critic_iter = 5
         self.lambda_term = 10
+        
+        self.size = 32
 
     def get_torch_variable(self, arg):
         if self.cuda:
@@ -326,18 +408,18 @@ class WGAN_GP(object):
 
     def real_images(self, images, number_of_images):
         if (self.C == 3):
-            return self.to_np(images.view(-1, self.C, 32, 32)[:self.number_of_images])
+            return self.to_np(images.view(-1, self.C, self.size, self.size)[:self.number_of_images])
         else:
-            return self.to_np(images.view(-1, 32, 32)[:self.number_of_images])
+            return self.to_np(images.view(-1, self.size, self.size)[:self.number_of_images])
 
     def generate_img(self, z, number_of_images):
         samples = self.G(z).data.cpu().numpy()[:number_of_images]
         generated_images = []
         for sample in samples:
             if self.C == 3:
-                generated_images.append(sample.reshape(self.C, 32, 32))
+                generated_images.append(sample.reshape(self.C, self.size, self.size))
             else:
-                generated_images.append(sample.reshape(32, 32))
+                generated_images.append(sample.reshape(self.size, self.size))
         return generated_images
 
     def to_np(self, x):
@@ -384,8 +466,39 @@ class WGAN_GP(object):
             alpha += alpha
             fake_im = self.G(z_intp)
             fake_im = fake_im.mul(0.5).add(0.5) #denormalize
-            images.append(fake_im.view(self.C,32,32).data.cpu())
+            images.append(fake_im.view(self.C,self.size,self.size).data.cpu())
 
         grid = utils.make_grid(images, nrow=number_int )
         utils.save_image(grid, 'interpolated_images/interpolated_{}.png'.format(str(number).zfill(3)))
         print("Saved interpolated images.")
+
+class WGAN_GP_64(WGAN_GP):
+    def __init__(self, args):
+        print("WGAN_GradientPenalty_64 init model.")
+        self.G = Generator_64(args.channels)
+        self.D = Discriminator_64(args.channels)
+        self.C = args.channels
+
+        # Check if cuda is available
+        self.check_cuda(args.cuda)
+
+        # WGAN values from paper
+        self.learning_rate = 1e-4
+        self.b1 = 0.5
+        self.b2 = 0.999
+        self.batch_size = 64
+
+        # WGAN_gradient penalty uses ADAM
+        self.d_optimizer = optim.Adam(self.D.parameters(), lr=self.learning_rate, betas=(self.b1, self.b2))
+        self.g_optimizer = optim.Adam(self.G.parameters(), lr=self.learning_rate, betas=(self.b1, self.b2))
+
+        # Set the logger
+        self.logger = Logger('./logs')
+        self.logger.writer.flush()
+        self.number_of_images = 10
+
+        self.generator_iters = args.generator_iters
+        self.critic_iter = 5
+        self.lambda_term = 10
+        
+        self.size = 64

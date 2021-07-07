@@ -4,7 +4,7 @@ from utils.data_loader import get_data_loader
 from models.gan import GAN
 from models.dcgan import DCGAN_MODEL
 from models.wgan_clipping import WGAN_CP
-from models.wgan_gradient_penalty import WGAN_GP
+from models.wgan_gradient_penalty import WGAN_GP, WGAN_GP_64
 
 
 def main(args):
@@ -17,6 +17,8 @@ def main(args):
         model = WGAN_CP(args)
     elif args.model == 'WGAN-GP':
         model = WGAN_GP(args)
+    elif args.model == 'WGAN-GP-64':
+        model = WGAN_GP_64(args)
     else:
         print("Model type non-existing. Try again.")
         exit(-1)
