@@ -1,3 +1,6 @@
+This repository was forked from https://github.com/Zeleni9/pytorch-wgan
+for the purpose of using WGAN in the context of training image based inversion.
+
 ## Pytorch code for GAN models
 This is the pytorch implementation of 3 different GAN models using same convolutional architecture.
 
