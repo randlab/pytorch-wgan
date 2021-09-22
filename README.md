@@ -30,68 +30,20 @@ pip install -r requirements.txt
 
  *Training*
  ---
-Running training of DCGAN model on Fashion-MNIST dataset:
 
+Running training of WGAN-GP model on 128x128 extractions from `ti/zahner.png` :
 
 ```
-python main.py --model DCGAN \
+python main.py --model WGAN-GP-128 \
                --is_train True \
-               --download True \
-               --dataroot datasets/fashion-mnist \
-               --dataset fashion-mnist \
-               --epochs 30 \
+               --dataset ti_sampler \
+               --ti_file zahner.png \
                --cuda True \
-               --batch_size 64
+               --batch_size 64 \
+               --dataroot ti
 ```
 
-Running training of WGAN-GP model on CIFAR-10 dataset:
-
-```
-python main.py --model WGAN-GP \
-               --is_train True \
-               --download True \
-               --dataroot datasets/cifar \
-               --dataset cifar \
-               --generator_iters 40000 \
-               --cuda True \
-               --batch_size 64
-```
-
-Start tensorboard:
-
-```
-tensorboard --logdir ./logs/
-```
-
-*Walk in latent space*
----
-*Interpolation between a two random latent vector z over 10 random points, shows that generated samples have smooth transitions.*
-
-
-<img src="images/latent_fashion.png" width="350"> &nbsp; &nbsp;&nbsp; &nbsp;&nbsp; &nbsp;   <img src="images/latent-mnist.png" width="350">
-
-
-
-
-
-*Generated examples MNIST, Fashion-MNIST, CIFAR-10*
----
-
-<img src="images/CIFAR-10.png" width="800">
-
-
-<img src="images/Fashion-MNIST.png" width="770">
-
-<img src="images/MNIST.png" width="800">
-
-
-
-*Inception score*
----
-  [About Inception score](https://arxiv.org/pdf/1801.01973.pdf)
-
-
-<img src="images/inception_graph_generator_iters.png" width="400" > &nbsp; &nbsp;&nbsp; &nbsp;&nbsp; &nbsp;   <img src="images/inception_graph_time.png" width="400">
+This training took around 4h 21 min on a single GPU.
 
 
 *Useful Resources*
