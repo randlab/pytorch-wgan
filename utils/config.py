@@ -5,11 +5,12 @@ import os
 def parse_args():
     parser = argparse.ArgumentParser(description="Pytorch implementation of GAN models.")
 
-    parser.add_argument('--model', type=str, default='DCGAN', choices=['GAN', 'DCGAN', 'WGAN-CP', 'WGAN-GP', 'WGAN-GP-64'])
+    parser.add_argument('--model', type=str, default='DCGAN', choices=['GAN', 'DCGAN', 'WGAN-CP', 'WGAN-GP', 'WGAN-GP-64', 'WGAN-GP-128'])
     parser.add_argument('--is_train', type=str, default='True')
     parser.add_argument('--dataroot', required=True, help='path to dataset')
-    parser.add_argument('--dataset', type=str, default='mnist', choices=['mnist', 'fashion-mnist', 'cifar', 'stl10', 'zahner', 'zahner_64'],
+    parser.add_argument('--dataset', type=str, default='mnist', choices=['mnist', 'fashion-mnist', 'cifar', 'stl10', 'zahner', 'zahner_64', 'zahner_128', 'zahner_mps_128', 'ti_sampler'],
                             help='The name of dataset')
+    parser.add_argument('--ti_file', type=str, default='False')
     parser.add_argument('--download', type=str, default='False')
     parser.add_argument('--epochs', type=int, default=50, help='The number of epochs to run')
     parser.add_argument('--batch_size', type=int, default=64, help='The size of batch')

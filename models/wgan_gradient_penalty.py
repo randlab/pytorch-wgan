@@ -83,6 +83,48 @@ class Generator_64(torch.nn.Module):
     def forward(self, x):
         x = self.main_module(x)
         return self.output(x)
+    
+class Generator_128(torch.nn.Module):
+    def __init__(self, channels, z_size):
+        super().__init__()
+        # Filters [1024, 512, 256]
+        # Input_dim = 100
+        # Output_dim = C (number of channels)
+        self.main_module = nn.Sequential(
+            nn.ConvTranspose2d(in_channels=z_size, out_channels=1024, kernel_size=4, stride=1, padding=0),
+            nn.BatchNorm2d(num_features=1024),
+            nn.ReLU(True),
+
+            # State (1024x4x4)
+            nn.ConvTranspose2d(in_channels=1024, out_channels=512, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(num_features=512),
+            nn.ReLU(True),
+
+            # State (512x8x8)
+            nn.ConvTranspose2d(in_channels=512, out_channels=256, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(num_features=256),
+            nn.ReLU(True),
+
+            # State (256x16x16)
+            nn.ConvTranspose2d(in_channels=256, out_channels=128, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(num_features=128),
+            nn.ReLU(True),
+            
+            # State (128x32x32)
+            nn.ConvTranspose2d(in_channels=128, out_channels=64, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(num_features=64),
+            nn.ReLU(True),
+            
+            # State (64x64x64)
+            nn.ConvTranspose2d(in_channels=64, out_channels=channels, kernel_size=4, stride=2, padding=1)
+            # output of main module --> Image (Cx128x128)
+            )
+
+        self.output = nn.Tanh()
+
+    def forward(self, x):
+        x = self.main_module(x)
+        return self.output(x)
 
 
 class Discriminator(torch.nn.Module):
@@ -166,6 +208,54 @@ class Discriminator_64(torch.nn.Module):
         # Use discriminator for feature extraction then flatten to vector of 16384
         x = self.main_module(x)
         return x.view(-1, 1024*4*4)
+    
+    
+class Discriminator_128(torch.nn.Module):
+    def __init__(self, channels):
+        super().__init__()
+        # Filters [256, 512, 1024]
+        # Input_dim = channels (Cx128x128)
+        # Output_dim = 1
+        self.main_module = nn.Sequential(
+            # Image (Cx128x128)
+            nn.Conv2d(in_channels=channels, out_channels=64, kernel_size=4, stride=2, padding=1),
+            nn.InstanceNorm2d(64, affine=True),
+            nn.LeakyReLU(0.2, inplace=True), 
+            
+            # Image (64x64x64)
+            nn.Conv2d(in_channels=64, out_channels=128, kernel_size=4, stride=2, padding=1),
+            nn.InstanceNorm2d(128, affine=True),
+            nn.LeakyReLU(0.2, inplace=True),
+            
+            # State (128x32x32)
+            nn.Conv2d(in_channels=128, out_channels=256, kernel_size=4, stride=2, padding=1),
+            nn.InstanceNorm2d(256, affine=True),
+            nn.LeakyReLU(0.2, inplace=True),
+
+            # State (256x16x16)
+            nn.Conv2d(in_channels=256, out_channels=512, kernel_size=4, stride=2, padding=1),
+            nn.InstanceNorm2d(512, affine=True),
+            nn.LeakyReLU(0.2, inplace=True),
+
+            # State (512x8x8)
+            nn.Conv2d(in_channels=512, out_channels=1024, kernel_size=4, stride=2, padding=1),
+            nn.InstanceNorm2d(1024, affine=True),
+            nn.LeakyReLU(0.2, inplace=True))
+            # output of main module --> State (1024x4x4)
+
+        self.output = nn.Sequential(
+            # The output of D is no longer a probability, we do not apply sigmoid at the output of D.
+            nn.Conv2d(in_channels=1024, out_channels=1, kernel_size=4, stride=1, padding=0))
+
+
+    def forward(self, x):
+        x = self.main_module(x)
+        return self.output(x)
+
+    def feature_extraction(self, x):
+        # Use discriminator for feature extraction then flatten to vector of 16384
+        x = self.main_module(x)
+        return x.view(-1, 1024*4*4)
 
 class WGAN_GP(object):
     def __init__(self, args):
@@ -197,6 +287,7 @@ class WGAN_GP(object):
         self.lambda_term = 10
         
         self.size = 32
+        self.z_size = 100
 
     def get_torch_variable(self, arg):
         if self.cuda:
@@ -246,7 +337,7 @@ class WGAN_GP(object):
                 if (images.size()[0] != self.batch_size):
                     continue
 
-                z = torch.rand((self.batch_size, 100, 1, 1))
+                z = torch.rand((self.batch_size, self.z_size, 1, 1))
 
                 images, z = self.get_torch_variable(images), self.get_torch_variable(z)
 
@@ -258,7 +349,7 @@ class WGAN_GP(object):
                 d_loss_real.backward(mone)
 
                 # Train with fake images
-                z = self.get_torch_variable(torch.randn(self.batch_size, 100, 1, 1))
+                z = self.get_torch_variable(torch.randn(self.batch_size, self.z_size, 1, 1))
 
                 fake_images = self.G(z)
                 d_loss_fake = self.D(fake_images)
@@ -282,7 +373,7 @@ class WGAN_GP(object):
             self.G.zero_grad()
             # train generator
             # compute loss with fake images
-            z = self.get_torch_variable(torch.randn(self.batch_size, 100, 1, 1))
+            z = self.get_torch_variable(torch.randn(self.batch_size, self.z_size, 1, 1))
             fake_images = self.G(z)
             g_loss = self.D(fake_images)
             g_loss = g_loss.mean()
@@ -314,7 +405,7 @@ class WGAN_GP(object):
                     os.makedirs('training_result_images/')
 
                 # Denormalize images and save them in grid 8x8
-                z = self.get_torch_variable(torch.randn(800, 100, 1, 1))
+                z = self.get_torch_variable(torch.randn(800, self.z_size, 1, 1))
                 samples = self.G(z)
                 samples = samples.mul(0.5).add(0.5)
                 samples = samples.data.cpu()[:64]
@@ -366,7 +457,7 @@ class WGAN_GP(object):
 
     def evaluate(self, test_loader, D_model_path, G_model_path):
         self.load_model(D_model_path, G_model_path)
-        z = self.get_torch_variable(torch.randn(self.batch_size, 100, 1, 1))
+        z = self.get_torch_variable(torch.randn(self.batch_size, self.z_size, 1, 1))
         samples = self.G(z)
         samples = samples.mul(0.5).add(0.5)
         samples = samples.data.cpu()
@@ -449,9 +540,9 @@ class WGAN_GP(object):
 
         number_int = 10
         # interpolate between twe noise(z1, z2).
-        z_intp = torch.FloatTensor(1, 100, 1, 1)
-        z1 = torch.randn(1, 100, 1, 1)
-        z2 = torch.randn(1, 100, 1, 1)
+        z_intp = torch.FloatTensor(1, self.z_size, 1, 1)
+        z1 = torch.randn(1, self.z_size, 1, 1)
+        z2 = torch.randn(1, self.z_size, 1, 1)
         if self.cuda:
             z_intp = z_intp.cuda()
             z1 = z1.cuda()
@@ -502,3 +593,36 @@ class WGAN_GP_64(WGAN_GP):
         self.lambda_term = 10
         
         self.size = 64
+        self.z_size = 100
+        
+class WGAN_GP_128(WGAN_GP):
+    def __init__(self, args):
+        print("WGAN_GradientPenalty_128 init model.")
+        self.z_size = 50
+        self.G = Generator_128(args.channels, self.z_size)
+        self.D = Discriminator_128(args.channels)
+        self.C = args.channels
+
+        # Check if cuda is available
+        self.check_cuda(args.cuda)
+
+        # WGAN values from paper
+        self.learning_rate = 1e-4
+        self.b1 = 0.5
+        self.b2 = 0.999
+        self.batch_size = 64
+
+        # WGAN_gradient penalty uses ADAM
+        self.d_optimizer = optim.Adam(self.D.parameters(), lr=self.learning_rate, betas=(self.b1, self.b2))
+        self.g_optimizer = optim.Adam(self.G.parameters(), lr=self.learning_rate, betas=(self.b1, self.b2))
+
+        # Set the logger
+        self.logger = Logger('./logs')
+        self.logger.writer.flush()
+        self.number_of_images = 10
+
+        self.generator_iters = args.generator_iters
+        self.critic_iter = 5
+        self.lambda_term = 10
+        
+        self.size = 128
